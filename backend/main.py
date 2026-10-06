@@ -195,17 +195,27 @@ def aggregate_pipeline_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 @app.post("/api/ingestion/process-folder")
 def process_folder(request: FolderIngestionRequest):
     folder_str = request.folder_path.strip()
-    folder_path = Path(folder_str)
+    # Se o caminho for vazio, default é 'dados_locais'
+    if not folder_str or folder_str in [".", "./"]:
+        folder_str = "dados_locais"
 
-    # Suporte a caminho relativo (ex: 'dados_locais' ou './dados_locais') relativo à raiz do repositório
-    if not folder_path.is_absolute():
-        base_dir = Path(__file__).resolve().parent.parent
+    base_dir = Path(__file__).resolve().parent.parent
+
+    # Se contiver barras invertidas do Windows ou letra de unidade (ex: d:\workspace...\dados_locais),
+    # ou se for relativo a 'dados_locais', redireciona para a pasta do repositório
+    if "\\" in folder_str or ":" in folder_str or "dados_locais" in folder_str.lower():
+        target = (base_dir / "dados_locais").resolve()
+        if target.exists() and target.is_dir():
+            folder_path = target
+        else:
+            folder_path = Path(folder_str)
+    elif not Path(folder_str).is_absolute():
         folder_path = (base_dir / folder_str).resolve()
+    else:
+        folder_path = Path(folder_str)
 
-    # Se o caminho absoluto não existir (ex: caminho local Windows enviado para servidor Linux no Render),
-    # recorre automaticamente à pasta dados_locais na raiz do repositório
+    # Fallback garantido para a pasta dados_locais do repositório
     if not folder_path.exists() or not folder_path.is_dir():
-        base_dir = Path(__file__).resolve().parent.parent
         fallback_path = (base_dir / "dados_locais").resolve()
         if fallback_path.exists() and fallback_path.is_dir():
             folder_path = fallback_path
