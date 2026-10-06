@@ -295,3 +295,140 @@ Quando uma consulta não retornar o resultado esperado, siga os 5 passos da tril
 7. **Testar Consultas e Fallbacks na Tela 2**:
    - Testar perguntas válidas sobre valores de faturas e contratos (observando a resposta categórica e os cards de evidências).
    - Testar perguntas fora de escopo (observando o disparo do fallback estrito *"Não há dados disponíveis para a requisição na base."*).
+
+---
+
+## 8. Guia Passo a Passo de Hospedagem Gratuita na Nuvem (GIT - GITHUB - RENDER - VERCEL)
+
+Esta seção documenta o fluxo completo para colocar a aplicação 100% no ar na nuvem, com links públicos HTTPS, alta disponibilidade e **custo zero** para professores e alunos.
+
+```
+                    +---------------------------------------+
+                    |             REPOSITÓRIO               |
+                    |               GITHUB                  |
+                    +-------------------+-------------------+
+                                        |
+                 +----------------------+----------------------+
+                 |                                             |
+                 v                                             v
++----------------------------------+         +----------------------------------+
+|         BACKEND (Python)         |         |        FRONTEND (Next.js)        |
+|            RENDER.COM            | <------ |            VERCEL.COM            |
+| - Runtime: Python 3              |   API   | - Root Directory: frontend       |
+| - Build: pip install -r reqs     |  HTTPS  | - Build: next build              |
+| - Start: uvicorn backend.main... |         | - NEXT_PUBLIC_BACKEND_URL        |
++-----------------+----------------+         +----------------------------------+
+                  |
+                  v
++----------------------------------+
+|           SUPABASE               |
+| - PostgreSQL nativo + PGVector   |
++----------------------------------+
+```
+
+---
+
+### Fase 1: Versionamento e Envio ao GitHub
+
+1. **Garantir a Proteção de Credenciais (`.gitignore`)**:
+   Antes de inicializar o repositório, certifique-se de que o arquivo `.gitignore` na raiz do projeto ignore o arquivo `.env` e a pasta `venv/`:
+   ```gitignore
+   venv/
+   .env
+   node_modules/
+   .next/
+   ```
+
+2. **Criar o Repositório no GitHub**:
+   - Acesse [github.com/new](https://github.com/new).
+   - Nome sugerido: `rag-pratico-generative-ai` ou `rag-pgvector-nextjs`.
+   - Visibilidade: **Público** (ou Privado).
+   - **Não** marque a opção de criar README ou .gitignore no GitHub (pois já existem no projeto local).
+
+3. **Subir os Arquivos**:
+   No terminal da raiz do projeto:
+   ```bash
+   git init
+   git add .
+   git commit -m "Primeiro commit da aplicação RAG completa"
+   git branch -M main
+   git remote add origin https://github.com/SEU-USUARIO/NOME-DO-REPOSITORIO.git
+   git push -u origin main
+   ```
+
+---
+
+### Fase 2: Hospedagem do Backend no Render.com (FastAPI)
+
+O **Render** é utilizado para hospedar o serviço em Python contendo a API FastAPI, o modelo de embeddings e a conexão com o Supabase.
+
+1. **Criar Conta**: Acesse [render.com](https://render.com) e faça login gratuito com sua conta do GitHub.
+2. **Criar o Serviço**:
+   - No Dashboard do Render, clique em **"New +"** (ou escolha na tela inicial) ➔ Selecione **`Web Services`**.
+   - Conecte o repositório do GitHub criado na Fase 1.
+3. **Configuração dos Parâmetros**:
+   - **Name**: `rag-backend` (ou o nome desejado).
+   - **Region**: Qualquer região gratuita (ex: *Oregon (US West)* ou *Ohio (US East)*).
+   - **Branch**: `main`.
+   - **Root Directory**: Deixe em branco (o Render executará a partir da raiz).
+   - **Runtime**: Selecione **`Python 3`**.
+   - **Build Command**:
+     ```bash
+     pip install -r requirements.txt
+     ```
+   - **Start Command**:
+     ```bash
+     uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+     ```
+   - **Instance Type**: Selecione **`Free`** ($0/mês).
+4. **Configuração das Variáveis de Ambiente (*Environment Variables*)**:
+   - Na mesma tela, clique no botão **`Add from .env`** e cole suas variáveis:
+     ```env
+     SUPABASE_URL=https://seu-projeto.supabase.co
+     SUPABASE_KEY=sua-chave-supabase
+     OPENROUTER_API_KEY=sua-chave-openrouter
+     OPENROUTER_MODEL=openrouter/auto
+     LLM_TEMPERATURE=0
+     ```
+5. **Realizar o Deploy**:
+   - Clique no botão preto **"Deploy Web Service"**.
+   - Aguarde o término do build (cerca de 2 a 3 minutos).
+   - Quando o status ficar verde (**"Live"**), copie a URL pública gerada no topo da tela (ex: `https://rag-backend-xxxx.onrender.com`).
+6. **Validação Rápida**:
+   - Abra a URL no navegador com `/api/status`:
+     `https://sua-url-do-render.onrender.com/api/status`
+   - O retorno deverá ser um JSON confirmando: `"ready_for_rag": true` e `"database": { "configured": true }`.
+
+---
+
+### Fase 3: Hospedagem do Frontend na Vercel (Next.js)
+
+A **Vercel** é a plataforma nativa do Next.js e hospedará a interface visual de forma global e com zero latência.
+
+1. **Acessar a Vercel**: Acesse [vercel.com](https://vercel.com) e faça login gratuito com sua conta do GitHub.
+2. **Importar o Repositório**:
+   - Clique no botão **"Add New..."** ➔ **"Project"**.
+   - Localize o repositório `rag-pratico-generative-ai` e clique em **"Import"**.
+3. **Configuração do Projeto**:
+   - **Root Directory**: Clique no botão **Edit** ao lado de Root Directory, selecione a subpasta **`frontend`** e clique em *Continue*.
+   - **Framework Preset**: A Vercel detectará automaticamente como **Next.js**.
+4. **Variáveis de Ambiente na Vercel (*Environment Variables*)**:
+   - Abra a seção **Environment Variables** e adicione:
+     - **Key**: `NEXT_PUBLIC_BACKEND_URL`
+     - **Value**: Cole a URL pública obtida no Render (ex: `https://rag-backend-xxxx.onrender.com` — *sem barra no final*).
+5. **Realizar o Deploy**:
+   - Clique no botão azul **"Deploy"**.
+   - Em menos de 2 minutos, o build será concluído e você receberá o link oficial da aplicação (ex: `https://rag-pratico-generative-ai.vercel.app`).
+
+---
+
+### Fase 4: Validação Ponta a Ponta na Nuvem
+
+1. Abra a URL pública da Vercel no navegador.
+2. Observe o badge no cabeçalho: ele deverá exibir **"X Chunks Indexados"** em verde (conectado diretamente através do Render ao Supabase).
+3. Na **Tela 2: Pergunta / RAG**, digite:
+   > *"Qual valor total na fatura da TechCloud Solutions?"*
+4. Acompanhe a **Barra de Rastreamento do Pipeline** em tempo real:
+   - *1. Embedding (384d)* ➔ *2. Retrieval (5 chunks)* ➔ *3. Prompt Aug.* ➔ *4. LLM Ativa (DeepSeek)*.
+5. Verifique a resposta categórica e estruturada com os valores em negrito e os cards de evidências com seus scores de similaridade na coluna lateral.
+
