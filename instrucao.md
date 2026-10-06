@@ -257,6 +257,12 @@ Acima do Chatbot, o sistema renderiza uma barra interativa marcando os 4 pontos 
 
 Além disso, o cabeçalho do chatbot inclui o botão **"Limpar Conversa"** para restaurar o histórico e o painel de evidências a qualquer momento.
 
+### 5.5. Salvaguarda de Auditoria: Ocultação Estrita de Evidências em Caso de Fallback
+Quando a pergunta não possui respaldo na base e a LLM aciona o fallback obrigatório (*"Não há dados disponíveis para a requisição na base."*):
+1. **Limpeza no Backend**: O endpoint `/api/rag/query` esvazia a lista de candidatos (`"candidates": []`).
+2. **Ocultação Visual no Frontend**: O painel lateral de evidências oculta sumariamente qualquer card de chunk ou score e exibe um alerta de salvaguarda (*"Nenhuma evidência exibida - fallback acionado"*).
+3. **Objetivo Didático e de Conformidade**: Essa blindagem impede que candidatos espúrios (trechos com pontuação baixa ou sem relação conceitual) sejam interpretados pelo usuário ou auditor como fundamentação de uma resposta inexistente.
+
 ---
 
 ## 6. Matriz de Parâmetros e Diagnóstico de Falhas no RAG
