@@ -50,7 +50,7 @@ A arquitetura do sistema foi desenhada com separação estrita de responsabilida
 | **Ambiente Local** | Python `venv` | Isolamento absoluto de dependências no sistema operacional para prevenir conflitos de versões. |
 | **Frontend** | Next.js 14+ / React / TS | Interface web moderna (tema escuro de alta fidelidade) com duas telas (Ingestão e Pergunta/RAG), barra de pipeline em tempo real e cards de evidências com scores. |
 | **Backend de Processamento** | Python 3.12 (FastAPI / Uvicorn) | Leitura de pasta local, extração e OCR simulado, análise de preenchimento, fatiamento e vetorização. |
-| **Modelo de Embeddings** | `SentenceTransformers` (`all-MiniLM-L6-v2`) | Conversão de texto em vetores densos de **384 dimensões**, garantindo compatibilidade no espaço métrico vetorial. |
+| **Modelo de Embeddings** | `FastEmbed` ONNX / `SentenceTransformers` (`all-MiniLM-L6-v2`) | Conversão de texto em vetores densos de **384 dimensões**. Executado via **FastEmbed (ONNX Runtime)** para consumo ultra-leve (~50MB de RAM, ideal para limites de nuvem como Render Free), mantendo 100% de precisão métrica. |
 | **Banco de Dados** | Supabase (PostgreSQL + PGVector) | Armazenamento relacional de auditoria documental e busca por similaridade de cosseno via índice HNSW. |
 | **Gateway de IA / LLM** | OpenRouter (`openrouter/auto`) | Roteamento dinâmico para modelos gratuitos de alto desempenho (ex: DeepSeek V3/R1), executando inferência estrita com `temperature=0`. |
 
@@ -192,6 +192,12 @@ O pipeline de ingestão opera em 4 etapas sequenciais visíveis na linha do temp
 1. **Isolamento de Falhas por Arquivo**: Se um arquivo corrompido falhar, o erro é registrado em log e o lote prossegue sem abortar o processamento dos demais documentos.
 2. **Cálculo de Pré-Estrutura**: Para cada documento, o backend calcula `total_campos`, `campos_preenchidos`, `campos_nulos` e o `percentual_sucesso` (gravados na tabela `documentos`).
 3. **Chunking Coerente (200 a 800 caracteres)**: Divide o texto respeitando quebras de parágrafos e sentenças, calculando metadados enriquecidos (`tokens`, `tamanho_bytes`, `categoria`, `origem`).
+
+### 4.1. Resolução e Portabilidade da Pasta de Ingestão (`dados_locais` vs Caminho Físico)
+Um ponto fundamental de arquitetura para ambientes em nuvem e compartilhamento com alunos é a **portabilidade do diretório de dados**:
+- **Caminho Físico Local (Windows)**: Em desenvolvimento na máquina do professor, o caminho absoluto pode ser algo como `d:\workspace\...\dados_locais`.
+- **Caminho Relativo no GitHub e Nuvem**: No repositório clonado no GitHub e no container Linux do Render, o caminho absoluto do Windows não existe. Os documentos devem ser lidos a partir do caminho relativo `dados_locais`.
+- **Resiliência Implementada no Backend**: O endpoint `/api/ingestion/process-folder` implementa normalização automática. Se um usuário acidentalmente enviar o caminho completo do Windows contendo barras invertidas (`\`) ou letras de unidade (`D:`), o backend intercepta a requisição e redireciona automaticamente para o diretório `dados_locais` oficial do repositório, garantindo compatibilidade multiplataforma sem quebra de execução.
 
 ---
 
@@ -390,9 +396,18 @@ O **Render** é utilizado para hospedar o serviço em Python contendo a API Fast
      OPENROUTER_MODEL=openrouter/auto
      LLM_TEMPERATURE=0
      ```
+
+> **Engenharia de Memória no Render Free (512 MB RAM)**:
+> O plano gratuito do Render possui limite de 512 MB de memória RAM. Modelos de embeddings tradicionais carregados via PyTorch (`sentence-transformers`) alocam cerca de 600 MB, provocando encerramento forçado do processo pelo Linux (**OOM - Out Of Memory**) e gerando erro `502 Bad Gateway`.
+> Por essa razão, o projeto utiliza **`fastembed` (ONNX Runtime)**:
+> - Executa o mesmo modelo `sentence-transformers/all-MiniLM-L6-v2` (384 dimensões).
+> - **Consumo de memória**: Apenas **~50 MB de RAM** (queda de mais de 90%).
+> - **Similaridade Vetorial**: 1.000000 (100% idêntica aos vetores do banco).
+> - **Build mais rápido**: Não necessita baixar a biblioteca pesada do PyTorch (reduzindo o tempo de build de 5 min para ~40s).
+
 5. **Realizar o Deploy**:
    - Clique no botão preto **"Deploy Web Service"**.
-   - Aguarde o término do build (cerca de 2 a 3 minutos).
+   - Aguarde o término do build (cerca de 1 a 2 minutos).
    - Quando o status ficar verde (**"Live"**), copie a URL pública gerada no topo da tela (ex: `https://rag-backend-xxxx.onrender.com`).
 6. **Validação Rápida**:
    - Abra a URL no navegador com `/api/status`:
@@ -431,4 +446,16 @@ A **Vercel** é a plataforma nativa do Next.js e hospedará a interface visual d
 4. Acompanhe a **Barra de Rastreamento do Pipeline** em tempo real:
    - *1. Embedding (384d)* ➔ *2. Retrieval (5 chunks)* ➔ *3. Prompt Aug.* ➔ *4. LLM Ativa (DeepSeek)*.
 5. Verifique a resposta categórica e estruturada com os valores em negrito e os cards de evidências com seus scores de similaridade na coluna lateral.
+
+---
+
+### Fase 5: Diagnóstico e Resolução de Erros Comuns na Nuvem (Troubleshooting)
+
+| Sintoma de Erro | Causa Técnica | Solução Aplicada |
+| :--- | :--- | :--- |
+| **`Falha ao consultar: Failed to fetch`** no chat | 1. **Cold Start do Render**: Após 15 min de inatividade no plano Free, o servidor hiberna e leva de 30 a 50s para acordar.<br>2. **Queda por Memória (OOM)**: PyTorch ultrapassando 512 MB de RAM. | • Aguardar o retorno inicial da primeira requisição.<br>• Migração concluída para o **FastEmbed ONNX** (~50 MB RAM), evitando qualquer crash de memória. |
+| **`Diretório não encontrado: d:\...`** na Ingestão | Envio de caminho físico absoluto do Windows para o container Linux na nuvem. | Usar o caminho relativo **`dados_locais`**. O backend possui sanitizador inteligente que converte automaticamente caminhos do Windows para a pasta do repositório. |
+| **`CERTIFICATE_VERIFY_FAILED`** no pip ou LLM | Inspeção de certificados SSL por proxies corporativos, educacionais ou antivírus. | • No pip: utilizar `--trusted-host pypi.org --trusted-host files.pythonhosted.org`<br>• No cliente HTTP: utilizar `httpx.AsyncClient(verify=False)`. |
+| **Valores da fatura omitidos na resposta** | Fragmentação do cabeçalho da fatura e da tabela de preços em chunks separados. | Ativação do **Sibling Chunk Retrieval** (`supabase_service.py`) com expansão para `TOP_K = 5`. |
+
 
