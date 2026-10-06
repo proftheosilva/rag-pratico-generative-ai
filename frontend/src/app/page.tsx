@@ -236,12 +236,17 @@ export default function Home() {
       const data = await res.json();
       setCurrentTrace(data.pipeline_trace || null);
 
+      const isFallback = Boolean(
+        data.is_fallback ||
+        (data.answer && data.answer.toLowerCase().includes("não há dados disponíveis para a requisição na base"))
+      );
+
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: data.answer,
         model_used: data.model_used,
-        is_fallback: data.is_fallback,
-        candidates: data.candidates || [],
+        is_fallback: isFallback,
+        candidates: isFallback ? [] : (data.candidates || []),
         pipeline_trace: data.pipeline_trace || null
       };
 
@@ -265,10 +270,8 @@ export default function Home() {
   };
 
   const sampleQuestions = [
-    "Qual é o valor total e o prazo de vigência do contrato com a Inova Tech?",
-    "Qual é o número da fatura, cliente e a data de vencimento?",
-    "Quais são os critérios de aprovação e frequência mínima no regulamento acadêmico?",
-    "Qual é a fórmula da teoria da relatividade?" // Teste de fallback estrito
+    "Qual o valor total a pagar e o status da fatura da TechCloud Solutions Ltda.?",
+    "Qual o valor total a pagar e os serviços prestados pela DataIntelligence Consultoria em IA?"
   ];
 
   return (
@@ -1042,16 +1045,27 @@ export default function Home() {
                   <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 8 }}>
                     SUGESTÕES RÁPIDAS DE TESTE:
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {sampleQuestions.map((q, idx) => (
                       <button
                         key={idx}
                         className="btn-secondary"
                         onClick={() => handleSendQuery(q)}
                         disabled={isQuerying}
-                        style={{ fontSize: "0.75rem", padding: "6px 10px" }}
+                        style={{
+                          fontSize: "0.8rem",
+                          padding: "8px 12px",
+                          textAlign: "left",
+                          lineHeight: 1.4,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          borderRadius: "var(--radius-sm)",
+                          cursor: "pointer"
+                        }}
                       >
-                        {q.length > 45 ? `${q.substring(0, 45)}...` : q}
+                        <ArrowRight size={14} color="var(--indigo-400)" style={{ flexShrink: 0 }} />
+                        <span>{q}</span>
                       </button>
                     ))}
                   </div>
@@ -1101,105 +1115,160 @@ export default function Home() {
                 </div>
 
                 <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
-                  {messages.filter((m) => m.role === "assistant" && m.candidates && m.candidates.length > 0).length === 0 ? (
-                    <div
-                      style={{
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--text-muted)",
-                        textAlign: "center",
-                        gap: 12
-                      }}
-                    >
-                      <Database size={32} color="var(--text-muted)" />
-                      <p style={{ fontSize: "0.82rem" }}>
-                        Nenhuma busca efetuada ainda. Ao enviar uma pergunta, os 3 trechos recuperados pelo PGVector aparecerão aqui.
-                      </p>
-                    </div>
-                  ) : (
-                    (() => {
-                      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant" && m.candidates);
-                      const candidates = lastAssistant?.candidates || [];
+                  {(() => {
+                    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+                    const isFallback = !lastAssistant ||
+                      Boolean(lastAssistant.is_fallback) ||
+                      lastAssistant.content.toLowerCase().includes("não há dados disponíveis para a requisição na base");
+                    const candidates = isFallback ? [] : (lastAssistant.candidates || []);
 
-                      return candidates.map((cand, idx) => {
-                        const score = Number(cand.similarity || 0);
-                        const scorePercent = Math.min(100, Math.max(0, Math.round(score * 100)));
+                    if (messages.length === 0) {
+                      return (
+                        <div
+                          style={{
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--text-muted)",
+                            textAlign: "center",
+                            gap: 12
+                          }}
+                        >
+                          <Database size={32} color="var(--text-muted)" />
+                          <p style={{ fontSize: "0.82rem" }}>
+                            Nenhuma busca efetuada ainda. Ao enviar uma pergunta válida, os trechos recuperados pelo PGVector (TOP_K = 5) aparecerão aqui.
+                          </p>
+                        </div>
+                      );
+                    }
 
-                        return (
-                          <div
-                            key={idx}
-                            style={{
-                              padding: 14,
-                              borderRadius: "var(--radius-md)",
-                              background: "var(--bg-secondary)",
-                              border: "1px solid var(--border-subtle)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 10
-                            }}
-                          >
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span className="badge badge-info" style={{ fontSize: "0.7rem" }}>
-                                ID: {cand.id ? String(cand.id).substring(0, 8) : `CH-${idx + 1}`}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.82rem",
-                                  fontWeight: 700,
-                                  color: score >= 0.7 ? "var(--emerald-400)" : "var(--amber-500)"
-                                }}
-                              >
-                                Score: {score.toFixed(2)}
-                              </span>
-                            </div>
+                    if (isFallback) {
+                      return (
+                        <div
+                          style={{
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--rose-400)",
+                            textAlign: "center",
+                            gap: 14,
+                            padding: "0 16px"
+                          }}
+                        >
+                          <ShieldAlert size={38} color="var(--rose-500)" />
+                          <div>
+                            <p style={{ fontWeight: 600, color: "#fecdd3", fontSize: "0.92rem", marginBottom: 6 }}>
+                              Nenhuma evidência exibida
+                            </p>
+                            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", maxWidth: 320, lineHeight: 1.4 }}>
+                              A LLM acionou o fallback estrito pois os dados solicitados não constam na base. Evidências foram totalmente ocultadas para garantir a integridade da auditoria.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
 
-                            {/* Barra de Progresso do Score */}
-                            <div
-                              style={{
-                                width: "100%",
-                                height: 5,
-                                background: "rgba(255,255,255,0.1)",
-                                borderRadius: 3,
-                                overflow: "hidden"
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: `${scorePercent}%`,
-                                  height: "100%",
-                                  background: score >= 0.7 ? "var(--emerald-400)" : "var(--amber-500)"
-                                }}
-                              />
-                            </div>
+                    if (candidates.length === 0) {
+                      return (
+                        <div
+                          style={{
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--text-muted)",
+                            textAlign: "center",
+                            gap: 12
+                          }}
+                        >
+                          <Database size={32} color="var(--text-muted)" />
+                          <p style={{ fontSize: "0.82rem" }}>
+                            Nenhum chunk com similaridade suficiente foi encontrado para esta consulta.
+                          </p>
+                        </div>
+                      );
+                    }
 
-                            <p
+                    return candidates.map((cand, idx) => {
+                      const score = Number(cand.similarity || 0);
+                      const scorePercent = Math.min(100, Math.max(0, Math.round(score * 100)));
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: 14,
+                            borderRadius: "var(--radius-md)",
+                            background: "var(--bg-secondary)",
+                            border: "1px solid var(--border-subtle)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 10
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span className="badge badge-info" style={{ fontSize: "0.7rem" }}>
+                              ID: {cand.id ? String(cand.id).substring(0, 8) : `CH-${idx + 1}`}
+                            </span>
+                            <span
                               style={{
                                 fontSize: "0.82rem",
-                                color: "var(--text-primary)",
-                                lineHeight: 1.45,
-                                background: "rgba(0,0,0,0.25)",
-                                padding: 10,
-                                borderRadius: "var(--radius-sm)",
-                                fontStyle: "italic"
+                                fontWeight: 700,
+                                color: score >= 0.7 ? "var(--emerald-400)" : "var(--amber-500)"
                               }}
                             >
-                              &ldquo;{cand.texto}&rdquo;
-                            </p>
-
-                            {cand.metadados && (
-                              <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", gap: 10 }}>
-                                <span>Origem: {cand.metadados.origem || "arquivo"}</span>
-                                <span>Categoria: {cand.metadados.categoria || "geral"}</span>
-                              </div>
-                            )}
+                              Score: {score.toFixed(2)}
+                            </span>
                           </div>
-                        );
-                      });
-                    })()
-                  )}
+
+                          {/* Barra de Progresso do Score */}
+                          <div
+                            style={{
+                              width: "100%",
+                              height: 5,
+                              background: "rgba(255,255,255,0.1)",
+                              borderRadius: 3,
+                              overflow: "hidden"
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${scorePercent}%`,
+                                height: "100%",
+                                background: score >= 0.7 ? "var(--emerald-400)" : "var(--amber-500)"
+                              }}
+                            />
+                          </div>
+
+                          <p
+                            style={{
+                              fontSize: "0.82rem",
+                              color: "var(--text-primary)",
+                              lineHeight: 1.45,
+                              background: "rgba(0,0,0,0.25)",
+                              padding: 10,
+                              borderRadius: "var(--radius-sm)",
+                              fontStyle: "italic"
+                            }}
+                          >
+                            &ldquo;{cand.texto}&rdquo;
+                          </p>
+
+                          {cand.metadados && (
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", gap: 10 }}>
+                              <span>Origem: {cand.metadados.origem || "arquivo"}</span>
+                              <span>Categoria: {cand.metadados.categoria || "geral"}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

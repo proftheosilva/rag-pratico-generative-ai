@@ -336,12 +336,19 @@ async def rag_query(request: QueryRequest):
         }
     }
 
+    # Se a LLM indicar fallback ou ausência de dados na base,
+    # limpamos a lista de candidatos para que nenhuma evidência seja retornada/exibida
+    is_fallback = bool(
+        llm_result.get("is_fallback") or
+        "não há dados disponíveis para a requisição na base" in llm_result["answer"].lower()
+    )
+
     return {
         "query": query_text,
         "answer": llm_result["answer"],
         "model_used": llm_result["model_used"],
-        "is_fallback": llm_result["is_fallback"],
-        "candidates": candidates,
+        "is_fallback": is_fallback,
+        "candidates": [] if is_fallback else candidates,
         "pipeline_trace": pipeline_trace
     }
 
