@@ -116,7 +116,7 @@ export default function Home() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Ingestão
-  const [folderPath, setFolderPath] = useState("d:\\workspace\\Digital College\\Professor\\IA Generativa\\Conteudo\\Módulo 2\\Unidade 3\\RAG\\dados_locais");
+  const [folderPath, setFolderPath] = useState("dados_locais");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentStage, setCurrentStage] = useState<number>(0); // 0: Idle, 1: A, 2: B, 3: C, 4: D
   const [ingestionResult, setIngestionResult] = useState<IngestionReport | null>(null);
@@ -414,7 +414,7 @@ export default function Home() {
                     type="text"
                     value={folderPath}
                     onChange={(e) => setFolderPath(e.target.value)}
-                    placeholder="Ex: d:\workspace\...\dados_locais"
+                    placeholder="Ex: dados_locais (pasta padrão) ou caminho absoluto"
                     style={{
                       width: "100%",
                       height: 48,

@@ -194,9 +194,23 @@ def aggregate_pipeline_results(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 @app.post("/api/ingestion/process-folder")
 def process_folder(request: FolderIngestionRequest):
-    folder_path = Path(request.folder_path)
+    folder_str = request.folder_path.strip()
+    folder_path = Path(folder_str)
+
+    # Suporte a caminho relativo (ex: 'dados_locais' ou './dados_locais') relativo à raiz do repositório
+    if not folder_path.is_absolute():
+        base_dir = Path(__file__).resolve().parent.parent
+        folder_path = (base_dir / folder_str).resolve()
+
+    # Se o caminho absoluto não existir (ex: caminho local Windows enviado para servidor Linux no Render),
+    # recorre automaticamente à pasta dados_locais na raiz do repositório
     if not folder_path.exists() or not folder_path.is_dir():
-        raise HTTPException(status_code=400, detail=f"Diretório não encontrado: {request.folder_path}")
+        base_dir = Path(__file__).resolve().parent.parent
+        fallback_path = (base_dir / "dados_locais").resolve()
+        if fallback_path.exists() and fallback_path.is_dir():
+            folder_path = fallback_path
+        else:
+            raise HTTPException(status_code=400, detail=f"Diretório não encontrado: {request.folder_path}")
 
     supported_extensions = {".pdf", ".txt", ".sql", ".json"}
     files = [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in supported_extensions]
