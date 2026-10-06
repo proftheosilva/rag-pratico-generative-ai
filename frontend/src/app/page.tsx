@@ -96,6 +96,8 @@ interface ChatMessage {
   pipeline_trace?: PipelineTrace;
 }
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://rag-backend-fg1w.onrender.com";
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"ingestion" | "rag">("ingestion");
   
@@ -130,7 +132,7 @@ export default function Home() {
   const fetchStatus = async () => {
     setIsCheckingStatus(true);
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/status");
+      const res = await fetch(`${BACKEND_URL}/api/status`);
       if (res.ok) {
         const data = await res.json();
         setDbStatus(data.database);
@@ -147,7 +149,7 @@ export default function Home() {
         configured: false,
         has_chunks: false,
         total_chunks: 0,
-        message: "Não foi possível conectar ao backend (http://127.0.0.1:8000)."
+        message: `Não foi possível conectar ao backend (${BACKEND_URL}).`
       });
     } finally {
       setIsCheckingStatus(false);
@@ -171,7 +173,7 @@ export default function Home() {
       const stageTimer2 = setTimeout(() => setCurrentStage(3), 1300);
       const stageTimer3 = setTimeout(() => setCurrentStage(4), 2000);
 
-      const res = await fetch("http://127.0.0.1:8000/api/ingestion/process-folder", {
+      const res = await fetch(`${BACKEND_URL}/api/ingestion/process-folder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ folder_path: folderPath.trim() })
@@ -215,7 +217,7 @@ export default function Home() {
     const stepTimer3 = setTimeout(() => setRagStep(4), 750);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/rag/query", {
+      const res = await fetch(`${BACKEND_URL}/api/rag/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: text, top_k: 5 })
